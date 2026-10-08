@@ -1,0 +1,23 @@
+import 'dotenv/config';import mongoose from 'mongoose';import bcrypt from 'bcryptjs';
+import {User,Item,Swap,Message,Report} from './models.js';import {calcValue} from './lib.js';
+await mongoose.connect(process.env.MONGODB_URI);
+await Promise.all([User,Item,Swap,Message,Report].map(m=>m.deleteMany({})));
+const hash=p=>bcrypt.hashSync(p,10);
+await User.create({name:'Swapset Admin',email:'admin@swapset.com',password:hash('Admin@1234'),city:'Delhi',role:'admin'});
+const P=[['Aarav Sharma','Delhi'],['Meera Nair','Bangalore'],['Riya Kapoor','Noida'],['Kabir Singh','Ghaziabad'],['Ananya Gupta','Muzaffarnagar'],['Rohan Verma','Meerut'],['Sara Khan','Lucknow'],['Vikram Malhotra','Chandigarh'],['Isha Jain','Jaipur'],['Dev Patel','Mumbai']];
+const users=await User.insertMany(P.map(([n,c])=>({name:n,city:c,email:n.split(' ')[0].toLowerCase()+'@demo.com',password:hash('Demo@1234'),bio:'Trying to buy less and swap more.',lastActive:new Date()})));
+const R=[['Nike Oversized Hoodie','Hoodie','Unisex','Nike','L','Good','Grey',3999],["Levi's 501 Jeans",'Jeans','Men',"Levi's",'32','Good','Indigo',4499],['Zara Casual Dress','Dress','Women','Zara','S','Like new','Black',2990],['Adidas Track Jacket','Jacket','Men','Adidas','M','Good','Navy',4999],['H&M Denim Jacket','Jacket','Women','H&M','M','Good','Light blue',2499],['Uniqlo Oversized Shirt','Shirt','Unisex','Uniqlo','L','Like new','White',1990],['Puma Sports T-shirt','T-shirt','Men','Puma','M','New','Red',1499],['FabIndia Block-print Kurta','Kurta','Women','FabIndia','M','Good','Mustard',1999],['Nike Air Force 1','Sneakers','Unisex','Nike','UK 8','Fair','White',7495],['Levi\'s Trucker Jacket','Jacket','Men',"Levi's",'L','Good','Denim blue',5999],
+['Zara Pleated Midi Skirt','Skirt','Women','Zara','S','Like new','Olive',2290],['H&M Knit Sweater','Sweater','Women','H&M','M','Good','Cream',1799],['Adidas Originals Tee','T-shirt','Men','Adidas','M','Like new','Black',1999],['Uniqlo Light Down Jacket','Jacket','Unisex','Uniqlo','M','Good','Charcoal',5990],['Puma Track Pants','Trousers','Men','Puma','L','Good','Black',2499],['W Printed Kurta','Kurta','Women','W','S','Like new','Teal',1799],['Biba Cotton Kurta','Kurta','Women','Biba','L','Good','Maroon',1999],['Zara Linen Shirt','Shirt','Men','Zara','M','Like new','Beige',2590],['Nike Dri-FIT Tee','T-shirt','Men','Nike','L','Good','Blue',1795],["Levi's 511 Slim Jeans",'Jeans','Men',"Levi's",'30','Fair','Dark blue',3999],
+['H&M Floral Dress','Dress','Women','H&M','M','Good','Floral',2299],['Adidas Ultraboost','Sneakers','Unisex','Adidas','UK 9','Good','Black',9999],['Mango Structured Blazer','Jacket','Women','Mango','S','Like new','Camel',4990],['Uniqlo Fleece Hoodie','Hoodie','Unisex','Uniqlo','M','Good','Navy',2490],['Puma Suede Sneakers','Sneakers','Unisex','Puma','UK 7','Good','Green',5999]];
+const items=await Item.insertMany(R.map(([title,type,category,brand,size,condition,color,p],i)=>{const o=users[i%10],d={title,type,category,brand,size,condition,color,originalPrice:p,ageYears:1+i%3};
+return{...d,value:calcValue(d),owner:o._id,city:o.city,description:`${brand} ${type.toLowerCase()} in ${condition.toLowerCase()} condition. Clean, well kept and ready for a new owner.`,createdAt:new Date(Date.now()-i*864e5)}}));
+const sw=(a,b,status,message,extra={})=>Swap.create({from:users[a]._id,to:users[b]._id,offered:items[a]._id,requested:items[b]._id,status,message,...extra});
+await sw(0,1,'PENDING','Hi! Would you swap your jeans for my hoodie?');
+const neg=await sw(2,3,'NEGOTIATING','Love the Adidas jacket. Interested in my dress?');
+const acc=await sw(4,5,'ACCEPTED','Denim jacket for your shirt?');
+await Item.updateMany({_id:{$in:[items[4]._id,items[5]._id]}},{status:'RESERVED'});
+for(const[a,b]of[[6,7],[8,9]]){await sw(a,b,'COMPLETED','Happy to swap!',{confirmedBy:[users[a]._id,users[b]._id],completedAt:new Date()});await Item.updateMany({_id:{$in:[items[a]._id,items[b]._id]}},{status:'SWAPPED'})}
+await Message.insertMany([[neg,2,'Hi Kabir! My dress is almost new, worn twice.'],[neg,3,'Nice. The jacket is worth a bit more, can you add an accessory?'],[neg,2,'I can add a belt. Deal?'],[acc,4,'Great, can we meet in Meerut this weekend?'],[acc,5,'Yes, Saturday works.']].map(([w,u,text],i)=>({swap:w._id,sender:users[u]._id,text,createdAt:new Date(Date.now()-(10-i)*6e4)})));
+await Report.create({reporter:users[1]._id,kind:'item',item:items[12]._id,reason:'Photos do not match the description.'});
+await Report.create({reporter:users[5]._id,kind:'dispute',swap:acc._id,reason:'Other person has not replied about the meetup.'});
+console.log('Seeded: 11 users, 25 items, 5 swaps.\nAdmin: admin@swapset.com / Admin@1234\nUsers: aarav@demo.com ... / Demo@1234');process.exit(0);
